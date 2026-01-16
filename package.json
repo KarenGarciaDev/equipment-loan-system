@@ -2,7 +2,7 @@
   "name": "equipment-loan-system",
   "private": true,
   "version": "1.0.0",
-  "packageManager": "npm@10.8.2",
+  "packageManager": "pnpm@9.15.0",
   "description": "Enterprise system for managing equipment loans.",
   "workspaces": [
     "apps/*",
