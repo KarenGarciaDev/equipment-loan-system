@@ -1,22 +1,38 @@
-import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { User } from './user.entity';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateUserDto } from '../../application/dto/create-user.dto';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
-  private users: User[] = []; // 👈 AQUÍ ESTÁ LA CLAVE
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateUserDto): User {
-    const user: User = {
-      id: Date.now(),
-      ...dto,
-    };
+  async create(dto: CreateUserDto) {
+    const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (exists) throw new ConflictException('Email already exists');
 
-    this.users.push(user);
-    return user;
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    const created = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: passwordHash,
+        name: dto.name,
+        role: dto.role ?? 'USER',
+      },
+    });
+
+    // Nunca devuelvas password
+    const { password, ...safe } = created;
+    return safe;
   }
 
-  findAll(): User[] {
-    return this.users;
+  async findAll() {
+    const users = await this.prisma.user.findMany({ orderBy: { id: 'desc' } });
+    return users.map(({ password, ...safe }) => safe);
+  }
+
+  async findByEmail(email: string) {
+    return this.prisma.user.findUnique({ where: { email } });
   }
 }
