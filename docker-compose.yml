@@ -16,7 +16,7 @@ services:
     networks:
       - qa-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d users_db" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d users_db"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -35,7 +35,7 @@ services:
     networks:
       - qa-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d auth_db" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -52,7 +52,7 @@ services:
     volumes:
       - postgres_inventory_data:/var/lib/postgresql/data
     networks:
-      - equipment-loan-network
+      - qa-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d inventory_db"]
       interval: 5s
@@ -85,6 +85,7 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
+      - GLOBAL_PREFIX=api/v1
       - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/users_db?schema=public
       - INTERNAL_TOKEN=super-internal-123
     depends_on:
@@ -97,20 +98,19 @@ services:
     build:
       context: .
       dockerfile: apps/api-auth/Dockerfile
+    container_name: api-auth
     env_file:
       - apps/api-auth/.env
-    container_name: api-auth
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
+      - GLOBAL_PREFIX=api/v1
       - JWT_SECRET=qa_secret
       - DATABASE_URL=postgresql://postgres:postgres@postgres-auth:5432/auth_db?schema=public
       - USERS_SERVICE_URL=http://api-users:3001/api/v1
       - INTERNAL_TOKEN=super-internal-123
       - REDIS_URL=redis://redis-cache:6379
-    volumes:
-      - ./apps/api-auth/prisma:/app/prisma
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -121,22 +121,24 @@ services:
     networks:
       - qa-network
 
-  # ---------------- Other services (por ahora) ----------------
   api-inventory:
     build: ./apps/api-inventory
     container_name: api-inventory
-    env_file:
-      - ./apps/api-inventory/.env
     ports:
       - "3002:3002"
+    environment:
+      - PORT=3002
+      - GLOBAL_PREFIX=api/v1
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-inventory:5432/inventory_db?schema=public
     depends_on:
       postgres-inventory:
         condition: service_healthy
     networks:
-      - equipment-loan-network
+      - qa-network
     command: >
       sh -c "npx prisma migrate deploy || true; node dist/main.js"
 
+  # ---------------- Other services (por ahora) ----------------
   api-loans:
     build: ./apps/api-loans
     container_name: api-loans
@@ -144,6 +146,7 @@ services:
       - "3003:3003"
     environment:
       - PORT=3003
+      - GLOBAL_PREFIX=api/v1
       - REDIS_URL=redis://redis-cache:6379
     depends_on:
       redis-cache:
@@ -158,6 +161,7 @@ services:
       - "3004:3004"
     environment:
       - PORT=3004
+      - GLOBAL_PREFIX=api/v1
       - REDIS_URL=redis://redis-cache:6379
     depends_on:
       redis-cache:
@@ -172,6 +176,7 @@ services:
       - "3005:3005"
     environment:
       - PORT=3005
+      - GLOBAL_PREFIX=api/v1
       - MONGO_URL=mongodb://mongo-notifications:27017/notifications_db
     depends_on:
       mongo-notifications:
@@ -186,6 +191,7 @@ services:
       - "3006:3006"
     environment:
       - PORT=3006
+      - GLOBAL_PREFIX=api/v1
       - MONGO_URL=mongodb://mongo-notifications:27017/audit_db
     depends_on:
       mongo-notifications:
@@ -200,6 +206,7 @@ services:
       - "3007:3007"
     environment:
       - PORT=3007
+      - GLOBAL_PREFIX=api/v1
     networks:
       - qa-network
 
@@ -210,6 +217,7 @@ services:
       - "3008:3008"
     environment:
       - PORT=3008
+      - GLOBAL_PREFIX=api/v1
     networks:
       - qa-network
 
@@ -220,6 +228,7 @@ services:
       - "3009:3009"
     environment:
       - PORT=3009
+      - GLOBAL_PREFIX=api/v1
     networks:
       - qa-network
 
