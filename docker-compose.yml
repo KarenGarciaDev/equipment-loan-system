@@ -1,6 +1,44 @@
-version: "3.9"
-
 services:
+  # ---------------- Kafka (Redpanda) ----------------
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    networks:
+      - qa-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8088:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: redpanda:9092
+    depends_on:
+      - redpanda
+    networks:
+      - qa-network
+
   # ---------------- DBs ----------------
   postgres-users:
     image: postgres:16
@@ -84,10 +122,10 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - PORT=3001
-      - GLOBAL_PREFIX=api/v1
-      - DATABASE_URL=postgresql://postgres:postgres@postgres-users:5432/users_db?schema=public
-      - INTERNAL_TOKEN=super-internal-123
+      PORT: "3001"
+      GLOBAL_PREFIX: "api/v1"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres-users:5432/users_db?schema=public"
+      INTERNAL_TOKEN: "super-internal-123"
     depends_on:
       postgres-users:
         condition: service_healthy
@@ -104,13 +142,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - PORT=3000
-      - GLOBAL_PREFIX=api/v1
-      - JWT_SECRET=qa_secret
-      - DATABASE_URL=postgresql://postgres:postgres@postgres-auth:5432/auth_db?schema=public
-      - USERS_SERVICE_URL=http://api-users:3001/api/v1
-      - INTERNAL_TOKEN=super-internal-123
-      - REDIS_URL=redis://redis-cache:6379
+      PORT: "3000"
+      GLOBAL_PREFIX: "api/v1"
+      JWT_SECRET: "qa_secret"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres-auth:5432/auth_db?schema=public"
+      USERS_SERVICE_URL: "http://api-users:3001/api/v1"
+      INTERNAL_TOKEN: "super-internal-123"
+      REDIS_URL: "redis://redis-cache:6379"
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -127,16 +165,26 @@ services:
     ports:
       - "3002:3002"
     environment:
-      - PORT=3002
-      - GLOBAL_PREFIX=api/v1
-      - DATABASE_URL=postgresql://postgres:postgres@postgres-inventory:5432/inventory_db?schema=public
+      PORT: "3002"
+      GLOBAL_PREFIX: "api/v1"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres-inventory:5432/inventory_db?schema=public"
+
+      # Kafka (dejo ambas por compatibilidad)
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_CLIENT_ID: "api-inventory"
+      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
     depends_on:
       postgres-inventory:
         condition: service_healthy
+      redpanda:
+        condition: service_started
     networks:
       - qa-network
     command: >
-      sh -c "npx prisma migrate deploy || true; node dist/main.js"
+      sh -lc "npx prisma generate &&
+              npx prisma migrate deploy || true;
+              node dist/main.js"
 
   # ---------------- Other services (por ahora) ----------------
   api-loans:
@@ -145,11 +193,15 @@ services:
     ports:
       - "3003:3003"
     environment:
-      - PORT=3003
-      - GLOBAL_PREFIX=api/v1
-      - REDIS_URL=redis://redis-cache:6379
+      PORT: "3003"
+      GLOBAL_PREFIX: "api/v1"
+      REDIS_URL: "redis://redis-cache:6379"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
     depends_on:
       redis-cache:
+        condition: service_started
+      redpanda:
         condition: service_started
     networks:
       - qa-network
@@ -160,11 +212,15 @@ services:
     ports:
       - "3004:3004"
     environment:
-      - PORT=3004
-      - GLOBAL_PREFIX=api/v1
-      - REDIS_URL=redis://redis-cache:6379
+      PORT: "3004"
+      GLOBAL_PREFIX: "api/v1"
+      REDIS_URL: "redis://redis-cache:6379"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
     depends_on:
       redis-cache:
+        condition: service_started
+      redpanda:
         condition: service_started
     networks:
       - qa-network
@@ -175,11 +231,17 @@ services:
     ports:
       - "3005:3005"
     environment:
-      - PORT=3005
-      - GLOBAL_PREFIX=api/v1
-      - MONGO_URL=mongodb://mongo-notifications:27017/notifications_db
+      PORT: "3005"
+      GLOBAL_PREFIX: "api/v1"
+      MONGO_URL: "mongodb://mongo-notifications:27017/notifications_db"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_GROUP_ID: "api-notifications"
+      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
     depends_on:
       mongo-notifications:
+        condition: service_started
+      redpanda:
         condition: service_started
     networks:
       - qa-network
@@ -190,11 +252,17 @@ services:
     ports:
       - "3006:3006"
     environment:
-      - PORT=3006
-      - GLOBAL_PREFIX=api/v1
-      - MONGO_URL=mongodb://mongo-notifications:27017/audit_db
+      PORT: "3006"
+      GLOBAL_PREFIX: "api/v1"
+      MONGO_URL: "mongodb://mongo-notifications:27017/audit_db"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_GROUP_ID: "api-audit"
+      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
     depends_on:
       mongo-notifications:
+        condition: service_started
+      redpanda:
         condition: service_started
     networks:
       - qa-network
@@ -205,8 +273,13 @@ services:
     ports:
       - "3007:3007"
     environment:
-      - PORT=3007
-      - GLOBAL_PREFIX=api/v1
+      PORT: "3007"
+      GLOBAL_PREFIX: "api/v1"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
+    depends_on:
+      redpanda:
+        condition: service_started
     networks:
       - qa-network
 
@@ -216,8 +289,13 @@ services:
     ports:
       - "3008:3008"
     environment:
-      - PORT=3008
-      - GLOBAL_PREFIX=api/v1
+      PORT: "3008"
+      GLOBAL_PREFIX: "api/v1"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
+    depends_on:
+      redpanda:
+        condition: service_started
     networks:
       - qa-network
 
@@ -227,8 +305,13 @@ services:
     ports:
       - "3009:3009"
     environment:
-      - PORT=3009
-      - GLOBAL_PREFIX=api/v1
+      PORT: "3009"
+      GLOBAL_PREFIX: "api/v1"
+      KAFKA_BROKERS: "redpanda:9092"
+      KAFKA_BROKER: "redpanda:9092"
+    depends_on:
+      redpanda:
+        condition: service_started
     networks:
       - qa-network
 
