@@ -1,34 +1,28 @@
-import { Injectable } from '@nestjs/common';
-import { InventoryItem } from './inventory.entity';
-import { CreateItemDto } from './dto/create-item.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateEquipmentDto } from './dto/create-equipment.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 @Injectable()
 export class InventoryService {
-  private items: InventoryItem[] = [];
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateItemDto): InventoryItem {
-    const item: InventoryItem = {
-      id: Date.now(),
-      name: dto.name,
-      serial: dto.serial,
-      available: true,
-    };
-
-    this.items.push(item);
-    return item;
+  create(dto: CreateEquipmentDto) {
+    return this.prisma.equipment.create({ data: dto });
   }
 
-  findAll(): InventoryItem[] {
-    return this.items;
+  findAll() {
+    return this.prisma.equipment.findMany({ orderBy: { id: 'desc' } });
   }
 
-  markUnavailable(id: number) {
-    const item = this.items.find(i => i.id === id);
-    if (item) item.available = false;
-  }
+  async updateStatus(id: number, dto: UpdateStatusDto) {
+    const exists = await this.prisma.equipment.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Equipment not found');
 
-  markAvailable(id: number) {
-    const item = this.items.find(i => i.id === id);
-    if (item) item.available = true;
+    return this.prisma.equipment.update({
+      where: { id },
+      data: { status: dto.status },
+    });
   }
 }
+

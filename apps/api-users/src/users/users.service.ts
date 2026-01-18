@@ -1,38 +1,76 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateUserDto } from '../../application/dto/create-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcryptjs';
+
+type PublicUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt?: Date;
+};
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateUserDto) {
-    const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (exists) throw new ConflictException('Email already exists');
+  private toPublicUser(user: any): PublicUser {
+    const { password, ...rest } = user ?? {};
+    return rest as PublicUser;
+  }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+  async create(dto: CreateUserDto) {
+    const exists = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+
+    if (exists) throw new BadRequestException('Email ya registrado');
+
+    const hash = await bcrypt.hash(dto.password, 10);
 
     const created = await this.prisma.user.create({
       data: {
         email: dto.email,
-        password: passwordHash,
+        password: hash,
         name: dto.name,
         role: dto.role ?? 'USER',
       },
     });
 
-    // Nunca devuelvas password
-    const { password, ...safe } = created;
-    return safe;
+    return this.toPublicUser(created);
   }
 
   async findAll() {
-    const users = await this.prisma.user.findMany({ orderBy: { id: 'desc' } });
-    return users.map(({ password, ...safe }) => safe);
+    const users = await this.prisma.user.findMany({
+      orderBy: { id: 'desc' },
+    });
+
+    return users.map((u) => this.toPublicUser(u));
   }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) return null;
+    return this.toPublicUser(user);
+  }
+
+  async findByEmailWithPassword(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        password: true, 
+        name: true,
+        role: true,
+        isActive: true,
+      },
+    });
   }
 }
