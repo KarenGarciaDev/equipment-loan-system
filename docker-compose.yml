@@ -97,6 +97,25 @@ services:
       timeout: 3s
       retries: 20
 
+  postgres-loans:
+    image: postgres:16
+    container_name: postgres-loans
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: loans_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_loans_data:/var/lib/postgresql/data
+    networks:
+      - qa-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d loans_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   redis-cache:
     image: redis:7-alpine
     container_name: redis-cache
@@ -168,8 +187,6 @@ services:
       PORT: "3002"
       GLOBAL_PREFIX: "api/v1"
       DATABASE_URL: "postgresql://postgres:postgres@postgres-inventory:5432/inventory_db?schema=public"
-
-      # Kafka (dejo ambas por compatibilidad)
       KAFKA_BROKERS: "redpanda:9092"
       KAFKA_BROKER: "redpanda:9092"
       KAFKA_CLIENT_ID: "api-inventory"
@@ -182,29 +199,48 @@ services:
     networks:
       - qa-network
     command: >
-      sh -lc "npx prisma generate &&
-              npx prisma migrate deploy || true;
+      sh -lc "pnpm exec prisma generate &&
+              pnpm exec prisma migrate deploy || true;
               node dist/main.js"
 
-  # ---------------- Other services (por ahora) ----------------
+  # ---------------- Other services ----------------
   api-loans:
     build: ./apps/api-loans
     container_name: api-loans
+    env_file:
+      - apps/api-loans/.env
     ports:
       - "3003:3003"
     environment:
       PORT: "3003"
       GLOBAL_PREFIX: "api/v1"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres-loans:5432/loans_db?schema=public"
+      JWT_SECRET: "qa_secret"
+      USERS_SERVICE_URL: "http://api-users:3001/api/v1"
+      INVENTORY_SERVICE_URL: "http://api-inventory:3002/api/v1"
+      INTERNAL_TOKEN: "super-internal-123"
       REDIS_URL: "redis://redis-cache:6379"
       KAFKA_BROKERS: "redpanda:9092"
       KAFKA_BROKER: "redpanda:9092"
+      KAFKA_GROUP_ID: "api-loans"
+      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
     depends_on:
+      postgres-loans:
+        condition: service_healthy
       redis-cache:
         condition: service_started
       redpanda:
         condition: service_started
+      api-users:
+        condition: service_started
+      api-inventory:
+        condition: service_started
     networks:
       - qa-network
+    command: >
+      sh -lc "pnpm exec prisma generate &&
+              pnpm exec prisma migrate deploy || true;
+              node dist/main.js"
 
   api-reservations:
     build: ./apps/api-reservations
@@ -323,4 +359,5 @@ volumes:
   postgres_users_data:
   postgres_auth_data:
   postgres_inventory_data:
+  postgres_loans_data:
   mongo_notifications_data:
