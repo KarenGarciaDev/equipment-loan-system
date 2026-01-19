@@ -1,15 +1,15 @@
-import { IsNumber, IsDateString } from 'class-validator';
+import { IsInt, IsISO8601 } from 'class-validator';
 
 export class CreateLoanDto {
-  @IsNumber()
-  userId: number;
+  @IsInt()
+  studentId: number;
 
-  @IsNumber()
+  @IsInt()
   equipmentId: number;
 
-  @IsDateString()
-  startDate: string;
+  @IsISO8601()
+  reservedFrom: string;
 
-  @IsDateString()
-  endDate: string;
+  @IsISO8601()
+  reservedTo: string;
 }
