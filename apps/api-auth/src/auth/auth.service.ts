@@ -4,8 +4,9 @@ import type { Request } from 'express';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { randomBytes } from 'crypto';
 
-type UserFromUsersService = {
+type UserFromDb = {
   id: number;
   email: string;
   password: string;
@@ -30,7 +31,8 @@ export class AuthService {
   private getUserAgent(req: Request): string {
     return (req.headers['user-agent'] as string | undefined) ?? 'unknown';
   }
-  private async findUserByEmail(email: string): Promise<UserFromUsersService | null> {
+
+  private async findUserByEmail(email: string): Promise<UserFromDb | null> {
     return this.prisma.user.findUnique({
       where: { email },
       select: {
@@ -44,6 +46,16 @@ export class AuthService {
     }) as any;
   }
 
+  /**
+   * Normaliza roles para evitar inconsistencias entre microservicios.
+   * Ajusta aquí si tu sistema usa otros nombres.
+   */
+  private normalizeRole(role: string): string {
+    const r = (role || '').toUpperCase().trim();
+    if (r === 'TECHNICIAN') return 'TECH';
+    return r;
+  }
+
   async login(dto: LoginDto, req: Request) {
     const ip = this.getIp(req);
     const userAgent = this.getUserAgent(req);
@@ -54,6 +66,7 @@ export class AuthService {
 
     try {
       const user = await this.findUserByEmail(dto.email);
+
       if (!user || user.isActive === false) {
         reason = 'USER_NOT_FOUND_OR_INACTIVE';
         throw new UnauthorizedException('Invalid credentials');
@@ -69,14 +82,21 @@ export class AuthService {
 
       success = true;
 
-      const access_token = await this.jwt.signAsync({
+      // ✅ Rol normalizado para que Loans pueda validar sin problemas
+      const role = this.normalizeRole(user.role);
+
+      // ✅ Payload estándar que Loans puede usar (sub + role)
+      const payload = {
         sub: user.id,
         email: user.email,
-        role: user.role,
-      });
+        name: user.name,
+        role, // TECH o STUDENT (según tu sistema)
+      };
 
+      const access_token = await this.jwt.signAsync(payload);
 
-      const refreshPlain = cryptoRandomString(48);
+      // ✅ Refresh token seguro
+      const refreshPlain = randomBytes(48).toString('base64url');
       const refreshHash = await bcrypt.hash(refreshPlain, 10);
 
       await this.prisma.refreshToken.create({
@@ -87,21 +107,22 @@ export class AuthService {
           ip,
           userAgent,
           revoked: false,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       });
 
       return {
         access_token,
-        refresh_token: refreshPlain, 
+        refresh_token: refreshPlain,
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
+          role, // ⬅️ devuelve el rol normalizado
         },
       };
     } finally {
+      // ✅ Auditoría de intentos de login (éxito o fallo)
       await this.prisma.loginAttempt.create({
         data: {
           userId,
@@ -114,14 +135,4 @@ export class AuthService {
       });
     }
   }
-}
-
-function cryptoRandomString(length: number) {
-  const chars =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let out = '';
-  for (let i = 0; i < length; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return out;
 }
