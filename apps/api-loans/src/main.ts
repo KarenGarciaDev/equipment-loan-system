@@ -5,10 +5,9 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Prefijo global
-  app.setGlobalPrefix('api');
+  const prefix = process.env.GLOBAL_PREFIX || 'api/v1';
+  app.setGlobalPrefix(prefix);
 
-  // Validaciones globales
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -20,7 +19,6 @@ async function bootstrap() {
   const port = process.env.PORT || 3003;
   await app.listen(port);
 
-  console.log(`🚀 Loan Service running on port ${port}`);
+  console.log(`🚀 Loan Service running on http://localhost:${port}/${prefix}`);
 }
 bootstrap();
-
