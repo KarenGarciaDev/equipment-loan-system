@@ -1,0 +1,32 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum LoanStatus {
+  RESERVED
+  APPROVED
+  BORROWED
+  RETURNED
+  CANCELLED
+}
+
+model Loan {
+  id           Int        @id @default(autoincrement())
+
+  studentId    Int
+  equipmentId  Int
+
+  reservedFrom DateTime
+  reservedTo   DateTime
+
+  status       LoanStatus @default(RESERVED)
+
+  technicianId Int?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
