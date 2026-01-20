@@ -7,6 +7,20 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      // SOLO ID, sin FK
+  tokenHash String
+  device    String?
+  ip        String?
+  userAgent String?
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 model LoginAttempt {
   id        Int      @id @default(autoincrement())
   userId    Int?
@@ -15,17 +29,10 @@ model LoginAttempt {
   ip        String?
   userAgent String?
   reason    String?
+  userRole  String?
+  userName  String?
   createdAt DateTime @default(now())
-}
 
-model RefreshToken {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  tokenHash String
-  device    String?
-  ip        String?
-  userAgent String?
-  revoked   Boolean  @default(false)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  @@index([email])
+  @@index([userId])
 }
