@@ -1,39 +1,34 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
-
-export interface Reservation {
-  id: number;
-  userId: number;
-  equipmentId: number;
-  reservationDate: string;
-  status: 'ACTIVE' | 'CANCELLED';
-}
-
 
 @Injectable()
 export class ReservationsService {
-  private reservations: Reservation[] = [];
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateReservationDto): Reservation {
-    const reservation: Reservation = {
-      id: Date.now(),
-      status: 'ACTIVE',
-      ...dto,
-    };
-
-    this.reservations.push(reservation);
-    return reservation;
+  create(dto: CreateReservationDto) {
+    return this.prisma.reservation.create({
+      data: {
+        userId: dto.userId,
+        equipmentId: dto.equipmentId,
+        reservationDate: new Date(dto.reservationDate),
+      },
+    });
   }
 
-  findAll(): Reservation[] {
-    return this.reservations;
+  findAll() {
+    return this.prisma.reservation.findMany({
+      orderBy: { id: 'desc' },
+    });
   }
 
-  cancel(id: number) {
-    const reservation = this.reservations.find(r => r.id === id);
-    if (!reservation) return { message: 'Reservation not found' };
+  async cancel(id: number) {
+    const exists = await this.prisma.reservation.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Reservation not found');
 
-    reservation.status = 'CANCELLED';
-    return reservation;
+    return this.prisma.reservation.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+    });
   }
 }
