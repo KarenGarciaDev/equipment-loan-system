@@ -259,8 +259,11 @@ services:
               pnpm exec prisma migrate deploy || true;
               node dist/main.js"
 
+
   api-reservations:
-    build: ./apps/api-reservations
+    build:
+      context: .
+      dockerfile: apps/api-reservations/Dockerfile
     container_name: api-reservations
     ports:
       - "3004:3004"
@@ -268,20 +271,33 @@ services:
       PORT: "3004"
       GLOBAL_PREFIX: "api/v1"
       DATABASE_URL: "postgresql://postgres:postgres@postgres-reservations:5432/reservations_db?schema=public"
+      JWT_SECRET: "qa_secret"
+      USERS_SERVICE_URL: "http://api-users:3001/api/v1"
+      INVENTORY_SERVICE_URL: "http://api-inventory:3002/api/v1"
+      INTERNAL_TOKEN: "super-internal-123"
       KAFKA_BROKERS: "redpanda:9092"
       KAFKA_CLIENT_ID: "api-reservations"
       KAFKA_GROUP_ID: "api-reservations"
+      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
+      KAFKA_TOPIC_RESERVATION: "reservation.events"
     depends_on:
       postgres-reservations:
         condition: service_healthy
       redpanda:
         condition: service_started
+      api-users:
+        condition: service_started
+      api-inventory:
+        condition: service_started
     networks:
       - qa-network
     command: >
-      sh -lc "pnpm exec prisma generate &&
-              pnpm exec prisma migrate deploy || true;
-              node dist/main.js"
+      sh -lc "
+      npx -y prisma@6.19.2 generate --schema prisma/schema.prisma &&
+      npx -y prisma@6.19.2 migrate deploy --schema prisma/schema.prisma || true &&
+      node dist/main.js
+      "
+
 
   api-notifications:
     build: ./apps/api-notifications
