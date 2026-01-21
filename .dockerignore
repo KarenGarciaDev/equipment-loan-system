@@ -1,0 +1,14 @@
+# dependencias
+**/node_modules
+**/dist
+
+# pnpm / turbo
+**/.turbo
+.pnpm-store
+
+# git
+.git
+.gitignore
+
+# logs
+*.log
