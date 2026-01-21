@@ -8,17 +8,28 @@ generator client {
 }
 
 enum ReservationStatus {
-  ACTIVE
+  PENDING
+  APPROVED
+  REJECTED
   CANCELLED
+  FULFILLED
 }
 
 model Reservation {
   id              Int               @id @default(autoincrement())
-  userId          Int
   equipmentId     Int
-  reservationDate DateTime
-  status          ReservationStatus @default(ACTIVE)
+  studentId       Int
+  studentEmail    String
+  studentName     String?           // nombre del que reserva (si viene en JWT)
+  technicianName  String?           // se llena al aprobar
+  startAt         DateTime
+  endAt           DateTime
+  reason          String?
+  status          ReservationStatus  @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  @@index([equipmentId])
+  @@index([studentId])
+  @@index([status])
 }
