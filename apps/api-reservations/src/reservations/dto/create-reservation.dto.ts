@@ -1,12 +1,17 @@
-import { IsNumber, IsDateString } from 'class-validator';
+import { IsInt, IsDateString, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateReservationDto {
-  @IsNumber()
-  userId: number;
-
-  @IsNumber()
+  @IsInt()
+  @Min(1)
   equipmentId: number;
 
   @IsDateString()
-  reservationDate: string;
+  startAt: string;
+
+  @IsDateString()
+  endAt: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
