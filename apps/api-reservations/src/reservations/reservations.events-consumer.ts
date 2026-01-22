@@ -4,26 +4,25 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Controller()
 export class ReservationsEventsConsumer {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   @EventPattern('equipment.events')
-  async onEquipmentEvent(@Payload() message: any) {
-    const evt = message?.value ?? message;
-    if (!evt?.type) return;
+  async handleEquipmentEvent(@Payload() message: any) {
+    const event = typeof message === 'string' ? JSON.parse(message) : message;
 
-    if (evt.type === 'EQUIPMENT_DELETED') {
-      const equipmentId = Number(evt.id);
-      if (!equipmentId) return;
-
-      await this.prisma.reservation.updateMany({
-        where: {
-          equipmentId,
-          status: { in: ['PENDING'] },
+    if (event.type === 'EQUIPMENT_CREATED') {
+      await this.prisma.equipmentSnapshot.upsert({
+        where: { equipmentId: event.id },
+        update: {
+          name: event.name,
+          status: 'AVAILABLE',
         },
-        data: { status: 'CANCELLED' },
+        create: {
+          equipmentId: event.id,
+          name: event.name,
+          status: 'AVAILABLE',
+        },
       });
-
-      console.log(`Reservas PENDING canceladas para equipo ${equipmentId}`);
     }
   }
 }
