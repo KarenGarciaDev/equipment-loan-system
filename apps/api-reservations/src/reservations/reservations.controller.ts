@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ApproveReservationDto } from './dto/approve-reservation.dto';
 
-@Controller('/api/v1/reservations')
+@Controller('reservations')
 export class ReservationsController {
   constructor(private readonly service: ReservationsService) {}
 
