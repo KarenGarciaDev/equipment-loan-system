@@ -11,10 +11,10 @@ import { ApproveReservationDto } from './dto/approve-reservation.dto';
 import { ClientKafka } from '@nestjs/microservices';
 
 type JwtUser = {
-  sub: number | string; // puede venir como string desde JWT
+  sub: number;
   email: string;
   role: string; // STUDENT | TECH | ADMIN
-  name?: string;
+  name?: string | null;
 };
 
 @Injectable()
@@ -62,11 +62,11 @@ export class ReservationsService {
       throw new BadRequestException('startAt must be before endAt');
     }
 
-    // ✅ Convertimos studentId a número para Prisma
     const studentId = Number(user.sub);
     if (isNaN(studentId)) {
       throw new BadRequestException('Invalid student ID');
     }
+
     const studentEmail = user.email;
     const studentName = user.name ?? null;
 
@@ -74,13 +74,8 @@ export class ReservationsService {
       where: { equipmentId: dto.equipmentId },
     });
 
-    if (!equipment) {
-      throw new NotFoundException('Equipment not found in inventory');
-    }
-
-    if (equipment.status !== 'AVAILABLE') {
-      throw new BadRequestException('Equipment not available');
-    }
+    if (!equipment) throw new NotFoundException('Equipment not found in inventory');
+    if (equipment.status !== 'AVAILABLE') throw new BadRequestException('Equipment not available');
 
     const activeReservations = await this.prisma.reservation.findMany({
       where: {
@@ -93,16 +88,12 @@ export class ReservationsService {
       this.overlaps(startAt, endAt, r.startAt, r.endAt),
     );
 
-    if (hasConflict) {
-      throw new BadRequestException(
-        'Equipment already reserved in that time range',
-      );
-    }
+    if (hasConflict) throw new BadRequestException('Equipment already reserved in that time range');
 
     const reservation = await this.prisma.reservation.create({
       data: {
         equipmentId: dto.equipmentId,
-        studentId, // ahora seguro es Int
+        studentId,
         studentEmail,
         studentName,
         startAt,
@@ -131,23 +122,14 @@ export class ReservationsService {
   // =========================
   // APPROVE RESERVATION
   // =========================
-  async approveReservation(
-    user: JwtUser,
-    id: number,
-    dto: ApproveReservationDto,
-  ) {
+  async approveReservation(user: JwtUser, id: number, dto: ApproveReservationDto) {
     if (!['TECH', 'ADMIN'].includes(user.role)) {
-      throw new ForbiddenException(
-        'Only tech or admin can approve reservations',
-      );
+      throw new ForbiddenException('Only tech or admin can approve reservations');
     }
 
     const reservation = await this.prisma.reservation.findUnique({ where: { id } });
-
     if (!reservation) throw new NotFoundException('Reservation not found');
-
-    if (reservation.status !== 'PENDING')
-      throw new BadRequestException('Reservation is not pending');
+    if (reservation.status !== 'PENDING') throw new BadRequestException('Reservation is not pending');
 
     const approved = await this.prisma.reservation.findMany({
       where: {
@@ -161,8 +143,7 @@ export class ReservationsService {
       this.overlaps(reservation.startAt, reservation.endAt, r.startAt, r.endAt),
     );
 
-    if (conflict)
-      throw new BadRequestException('Conflict with another approved reservation');
+    if (conflict) throw new BadRequestException('Conflict with another approved reservation');
 
     const updated = await this.prisma.reservation.update({
       where: { id },
@@ -185,14 +166,10 @@ export class ReservationsService {
   // =========================
   async cancelReservation(user: JwtUser, id: number) {
     const reservation = await this.prisma.reservation.findUnique({ where: { id } });
-
     if (!reservation) throw new NotFoundException('Reservation not found');
 
-    const isOwner = reservation.studentId === Number(user.sub);
-
-    if (!isOwner && user.role !== 'ADMIN') {
-      throw new ForbiddenException('Not allowed to cancel this reservation');
-    }
+    const isOwner = reservation.studentId === user.sub;
+    if (!isOwner && user.role !== 'ADMIN') throw new ForbiddenException('Not allowed to cancel this reservation');
 
     if (['CANCELLED', 'REJECTED', 'FULFILLED'].includes(reservation.status)) {
       throw new BadRequestException('Reservation cannot be cancelled');
@@ -218,7 +195,7 @@ export class ReservationsService {
   // =========================
   listByStudent(user: JwtUser) {
     return this.prisma.reservation.findMany({
-      where: { studentId: Number(user.sub) },
+      where: { studentId: user.sub },
       orderBy: { createdAt: 'desc' },
     });
   }
