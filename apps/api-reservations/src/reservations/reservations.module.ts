@@ -15,11 +15,11 @@ import { ReservationsEventsConsumer } from './reservations.events-consumer';
         transport: Transport.KAFKA,
         options: {
           client: {
-            clientId: 'reservations-service',
-            brokers: ['redpanda:9092'],
+            brokers: (process.env.KAFKA_BROKERS || 'redpanda:9092').split(','),
+            clientId: process.env.KAFKA_CLIENT_ID || 'api-reservations',
           },
           consumer: {
-            groupId: 'reservations-consumer',
+            groupId: process.env.KAFKA_GROUP_ID || 'api-reservations',
           },
         },
       },
