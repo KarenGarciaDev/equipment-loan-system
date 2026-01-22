@@ -8,12 +8,23 @@ export class NotificationsConsumer {
 
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  // Consumir todos los eventos de reservaciones
-  @EventPattern('reservation.events')
+  @EventPattern(process.env.KAFKA_TOPIC || 'reservation.events')
   async handleReservationEvents(@Payload() message: any) {
-    this.logger.log('Received reservation event: ' + JSON.stringify(message.value));
+    try {
+      // KafkaJS puede entregar { value: Buffer } o el objeto directo
+      const payload =
+        message?.value && Buffer.isBuffer(message.value)
+          ? JSON.parse(message.value.toString())
+          : message?.value && typeof message.value === 'string'
+            ? JSON.parse(message.value)
+            : message?.value
+              ? message.value
+              : message;
 
-    // Aquí mandamos la "notificación"
-    this.notificationsService.sendNotification(message.value);
+      this.logger.log(`✅ Received reservation event: ${JSON.stringify(payload)}`);
+      this.notificationsService.sendNotification(payload);
+    } catch (error) {
+      this.logger.error('❌ Error parsing reservation event', error as any);
+    }
   }
 }
