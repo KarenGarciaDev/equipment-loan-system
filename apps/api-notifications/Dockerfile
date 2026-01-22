@@ -1,12 +1,17 @@
 FROM node:18-alpine
 
 WORKDIR /app
+RUN corepack enable
 
-COPY package*.json ./
-RUN npm install
+# Copiar solo package.json
+COPY package.json ./
 
+# Instalar dependencias
+RUN pnpm install --prod=false
+
+# Copiar todo el código
 COPY . .
-RUN npm run build
 
 EXPOSE 3005
-CMD ["npm", "run", "start:prod"]
+
+CMD ["pnpm", "start"]
