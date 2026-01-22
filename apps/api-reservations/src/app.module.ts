@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
-import { JwtStrategy } from './auth/jwt.strategy';
 import { ReservationsModule } from './reservations/reservations.module';
-
+import { PrismaModule } from './prisma/prisma.module';
+import { KafkaModule } from './kafka/kafka.module';
+import { AuthModule } from './auth/auth.module';
 @Module({
-  imports: [PassportModule, ReservationsModule],
-  providers: [JwtStrategy],
+  imports: [
+    PrismaModule,
+    KafkaModule,
+    AuthModule,
+    ReservationsModule,
+  ],
 })
 export class AppModule {}
