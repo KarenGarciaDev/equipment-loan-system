@@ -259,7 +259,6 @@ services:
               pnpm exec prisma migrate deploy || true;
               node dist/main.js"
 
-
   api-reservations:
     build:
       context: .
@@ -293,23 +292,21 @@ services:
     networks:
       - qa-network
 
-
+  # ---------------- Notifications (Kafka consumer ONLY) ----------------
   api-notifications:
     build: ./apps/api-notifications
     container_name: api-notifications
-    ports:
-      - "3005:3005"
     environment:
-      PORT: "3005"
-      GLOBAL_PREFIX: "api/v1"
       KAFKA_BROKERS: "redpanda:9092"
-      KAFKA_GROUP_ID: "api-notifications"
-      KAFKA_TOPIC_EQUIPMENT: "reservation.events"
+      KAFKA_GROUP_ID: "api-notifications-server"
+      KAFKAJS_NO_PARTITIONER_WARNING: "1"
     depends_on:
       redpanda:
         condition: service_started
     networks:
       - qa-network
+    restart: unless-stopped
+
 
   api-audit:
     build: ./apps/api-audit
