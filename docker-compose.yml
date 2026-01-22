@@ -267,6 +267,7 @@ services:
     container_name: api-reservations
     ports:
       - "3004:3004"
+      - "5555:5555"
     environment:
       PORT: "3004"
       GLOBAL_PREFIX: "api/v1"
@@ -291,12 +292,6 @@ services:
         condition: service_started
     networks:
       - qa-network
-    command: >
-      sh -lc "
-      npx -y prisma@6.19.2 generate --schema prisma/schema.prisma &&
-      npx -y prisma@6.19.2 migrate deploy --schema prisma/schema.prisma || true &&
-      node dist/main.js
-      "
 
 
   api-notifications:
