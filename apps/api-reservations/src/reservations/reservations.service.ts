@@ -9,13 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ApproveReservationDto } from './dto/approve-reservation.dto';
 import { ClientKafka } from '@nestjs/microservices';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
 
 type JwtUser = {
-  sub: number;
+  sub: number | string; // puede venir como string desde JWT
   email: string;
-  role: string;     // STUDENT | TECH | ADMIN
+  role: string; // STUDENT | TECH | ADMIN
   name?: string;
 };
 
@@ -24,20 +22,26 @@ export class ReservationsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('KAFKA_RESERVATIONS') private readonly kafka: ClientKafka,
-    private readonly http: HttpService,
   ) {}
 
   async onModuleInit() {
     await this.kafka.connect();
   }
 
+  // =========================
+  // HELPERS
+  // =========================
   private ensureStudent(user: JwtUser) {
-    if (user.role !== 'STUDENT') throw new ForbiddenException('Only students can create reservations');
+    if (user.role !== 'STUDENT') {
+      throw new ForbiddenException('Only students can create reservations');
+    }
   }
 
-  private toDate(s: string) {
-    const d = new Date(s);
-    if (isNaN(d.getTime())) throw new BadRequestException('Invalid date format');
+  private toDate(value: string) {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) {
+      throw new BadRequestException('Invalid date format');
+    }
     return d;
   }
 
@@ -45,41 +49,62 @@ export class ReservationsService {
     return aStart < bEnd && bStart < aEnd;
   }
 
-  private async inventoryExists(equipmentId: number) {
-    const base = process.env.INVENTORY_BASE_URL || 'http://api-inventory:3002';
-    try {
-      const res = await firstValueFrom(this.http.get(`${base}/api/v1/equipment/${equipmentId}`));
-      return res.data;
-    } catch {
-      throw new NotFoundException('Equipment not found in inventory');
-    }
-  }
-
+  // =========================
+  // CREATE RESERVATION
+  // =========================
   async createReservation(user: JwtUser, dto: CreateReservationDto) {
     this.ensureStudent(user);
 
     const startAt = this.toDate(dto.startAt);
     const endAt = this.toDate(dto.endAt);
-    if (startAt >= endAt) throw new BadRequestException('startAt must be < endAt');
 
-    const equipment = await this.inventoryExists(dto.equipmentId);
+    if (startAt >= endAt) {
+      throw new BadRequestException('startAt must be before endAt');
+    }
 
-    const active = await this.prisma.reservation.findMany({
+    // ✅ Convertimos studentId a número para Prisma
+    const studentId = Number(user.sub);
+    if (isNaN(studentId)) {
+      throw new BadRequestException('Invalid student ID');
+    }
+    const studentEmail = user.email;
+    const studentName = user.name ?? null;
+
+    const equipment = await this.prisma.equipmentSnapshot.findUnique({
+      where: { equipmentId: dto.equipmentId },
+    });
+
+    if (!equipment) {
+      throw new NotFoundException('Equipment not found in inventory');
+    }
+
+    if (equipment.status !== 'AVAILABLE') {
+      throw new BadRequestException('Equipment not available');
+    }
+
+    const activeReservations = await this.prisma.reservation.findMany({
       where: {
         equipmentId: dto.equipmentId,
         status: { in: ['PENDING', 'APPROVED'] },
       },
     });
 
-    const conflict = active.some(r => this.overlaps(startAt, endAt, r.startAt, r.endAt));
-    if (conflict) throw new BadRequestException('Equipment already reserved in that time range');
+    const hasConflict = activeReservations.some(r =>
+      this.overlaps(startAt, endAt, r.startAt, r.endAt),
+    );
 
-    const created = await this.prisma.reservation.create({
+    if (hasConflict) {
+      throw new BadRequestException(
+        'Equipment already reserved in that time range',
+      );
+    }
+
+    const reservation = await this.prisma.reservation.create({
       data: {
         equipmentId: dto.equipmentId,
-        studentId: user.sub,
-        studentEmail: user.email,
-        studentName: user.name ?? null,
+        studentId, // ahora seguro es Int
+        studentEmail,
+        studentName,
         startAt,
         endAt,
         reason: dto.reason,
@@ -89,30 +114,41 @@ export class ReservationsService {
 
     await this.kafka.emit('reservation.events', {
       type: 'RESERVATION_CREATED',
-      reservationId: created.id,
-      equipmentId: created.equipmentId,
-      equipmentName: equipment?.name ?? null,
-      studentId: created.studentId,
-      studentEmail: created.studentEmail,
-      studentName: created.studentName,
-      startAt: created.startAt.toISOString(),
-      endAt: created.endAt.toISOString(),
+      reservationId: reservation.id,
+      equipmentId: reservation.equipmentId,
+      equipmentName: equipment.name,
+      studentId: reservation.studentId,
+      studentEmail: reservation.studentEmail,
+      studentName: reservation.studentName,
+      startAt: reservation.startAt.toISOString(),
+      endAt: reservation.endAt.toISOString(),
       at: new Date().toISOString(),
     });
 
-    return created;
+    return reservation;
   }
 
-  async approveReservation(user: JwtUser, id: number, dto: ApproveReservationDto) {
+  // =========================
+  // APPROVE RESERVATION
+  // =========================
+  async approveReservation(
+    user: JwtUser,
+    id: number,
+    dto: ApproveReservationDto,
+  ) {
     if (!['TECH', 'ADMIN'].includes(user.role)) {
-      throw new ForbiddenException('Only tech/admin can approve reservations');
+      throw new ForbiddenException(
+        'Only tech or admin can approve reservations',
+      );
     }
 
     const reservation = await this.prisma.reservation.findUnique({ where: { id } });
-    if (!reservation) throw new NotFoundException('Reservation not found');
-    if (reservation.status !== 'PENDING') throw new BadRequestException('Reservation not pending');
 
-    // asegura que no exista otra APPROVED cruzada
+    if (!reservation) throw new NotFoundException('Reservation not found');
+
+    if (reservation.status !== 'PENDING')
+      throw new BadRequestException('Reservation is not pending');
+
     const approved = await this.prisma.reservation.findMany({
       where: {
         equipmentId: reservation.equipmentId,
@@ -124,7 +160,9 @@ export class ReservationsService {
     const conflict = approved.some(r =>
       this.overlaps(reservation.startAt, reservation.endAt, r.startAt, r.endAt),
     );
-    if (conflict) throw new BadRequestException('Conflict with another approved reservation');
+
+    if (conflict)
+      throw new BadRequestException('Conflict with another approved reservation');
 
     const updated = await this.prisma.reservation.update({
       where: { id },
@@ -142,12 +180,19 @@ export class ReservationsService {
     return updated;
   }
 
+  // =========================
+  // CANCEL RESERVATION
+  // =========================
   async cancelReservation(user: JwtUser, id: number) {
     const reservation = await this.prisma.reservation.findUnique({ where: { id } });
+
     if (!reservation) throw new NotFoundException('Reservation not found');
 
-    const isOwner = reservation.studentId === user.sub;
-    if (!isOwner && user.role !== 'ADMIN') throw new ForbiddenException('Not allowed');
+    const isOwner = reservation.studentId === Number(user.sub);
+
+    if (!isOwner && user.role !== 'ADMIN') {
+      throw new ForbiddenException('Not allowed to cancel this reservation');
+    }
 
     if (['CANCELLED', 'REJECTED', 'FULFILLED'].includes(reservation.status)) {
       throw new BadRequestException('Reservation cannot be cancelled');
@@ -168,14 +213,19 @@ export class ReservationsService {
     return updated;
   }
 
+  // =========================
+  // LISTS
+  // =========================
   listByStudent(user: JwtUser) {
     return this.prisma.reservation.findMany({
-      where: { studentId: user.sub },
+      where: { studentId: Number(user.sub) },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   listAll() {
-    return this.prisma.reservation.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.reservation.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }
