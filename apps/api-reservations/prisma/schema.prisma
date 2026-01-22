@@ -33,3 +33,10 @@ model Reservation {
   @@index([studentId])
   @@index([status])
 }
+
+model EquipmentSnapshot {
+  equipmentId Int @id
+  name        String
+  status      String
+  createdAt   DateTime @default(now())
+}
