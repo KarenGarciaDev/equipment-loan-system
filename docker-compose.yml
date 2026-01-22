@@ -302,13 +302,10 @@ services:
     environment:
       PORT: "3005"
       GLOBAL_PREFIX: "api/v1"
-      MONGO_URL: "mongodb://mongo-notifications:27017/notifications_db"
       KAFKA_BROKERS: "redpanda:9092"
       KAFKA_GROUP_ID: "api-notifications"
-      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
+      KAFKA_TOPIC_EQUIPMENT: "reservation.events"
     depends_on:
-      mongo-notifications:
-        condition: service_started
       redpanda:
         condition: service_started
     networks:
