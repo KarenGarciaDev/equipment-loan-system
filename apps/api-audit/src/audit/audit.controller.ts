@@ -1,20 +1,24 @@
-import { Controller, Post, Get, Body } from '@nestjs/common';
+// apps/api-audit/src/audit/audit.controller.ts
+import { Controller, Logger } from '@nestjs/common';
+import { EventPattern, Payload, Ctx, KafkaContext } from '@nestjs/microservices';
 import { AuditService } from './audit.service';
-import { CreateAuditDto } from './dto/create-audit.dto';
 
-@Controller('api/audit')
+@Controller()
 export class AuditController {
+  private readonly logger = new Logger(AuditController.name);
+
   constructor(private readonly auditService: AuditService) {}
 
-  // Crear un registro de auditoría
-  @Post()
-  create(@Body() dto: CreateAuditDto): any {
-    return this.auditService.create(dto);
-  }
+  @EventPattern('reservation.events')
+  async handleReservationEvents(
+    @Payload() message: any,
+    @Ctx() context: KafkaContext,
+  ) {
+    const topic = context.getTopic();
 
-  // Obtener todos los registros de auditoría
-  @Get()
-  findAll(): any[] {
-    return this.auditService.findAll();
+    this.logger.log(`📥 EVENT FROM ${topic}`);
+    this.logger.debug(message);
+
+    await this.auditService.saveEvent(topic, message);
   }
 }
