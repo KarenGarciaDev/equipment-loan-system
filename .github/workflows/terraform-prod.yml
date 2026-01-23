@@ -2,19 +2,26 @@ name: Terraform PROD
 
 on:
   push:
-    branches: [ "prod" ]
+    branches: ["prod"]
 
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
+
+      # 🔍 Debug para confirmar rutas (muy importante)
+      - name: Debug paths
+        run: |
+          ls -la
+          ls -la terraform
+          ls -la terraform/terraform
+          ls -la terraform/terraform/prod
 
       - name: Terraform fmt
         working-directory: terraform/terraform/prod
@@ -39,7 +46,9 @@ jobs:
           TF_VAR_key_name: ${{ secrets.TF_VAR_key_name }}
           TF_VAR_my_ip_cidr: ${{ secrets.TF_VAR_my_ip_cidr }}
           TF_VAR_dockerhub_user: ${{ secrets.TF_VAR_dockerhub_user }}
-          TF_VAR_image_tag: ${{ secrets.TF_VAR_image_tag }}
+          TF_VAR_image_tag: ${{ secrets.TF_VAR_image_tag_prod }}
+          TF_VAR_jwt_secret: ${{ secrets.TF_VAR_jwt_secret_prod }}
+          TF_VAR_internal_token: ${{ secrets.TF_VAR_internal_token_prod }}
         run: terraform plan
 
       - name: Terraform apply
@@ -52,5 +61,7 @@ jobs:
           TF_VAR_key_name: ${{ secrets.TF_VAR_key_name }}
           TF_VAR_my_ip_cidr: ${{ secrets.TF_VAR_my_ip_cidr }}
           TF_VAR_dockerhub_user: ${{ secrets.TF_VAR_dockerhub_user }}
-          TF_VAR_image_tag: ${{ secrets.TF_VAR_image_tag }}
+          TF_VAR_image_tag: ${{ secrets.TF_VAR_image_tag_prod }}
+          TF_VAR_jwt_secret: ${{ secrets.TF_VAR_jwt_secret_prod }}
+          TF_VAR_internal_token: ${{ secrets.TF_VAR_internal_token_prod }}
         run: terraform apply -auto-approve
