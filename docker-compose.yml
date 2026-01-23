@@ -143,13 +143,13 @@ services:
     networks:
       - qa-network
 
-  mongo-notifications:
+  mongo-audit:
     image: mongo:7
-    container_name: mongo-notifications
+    container_name: mongo-audit
     ports:
       - "27017:27017"
     volumes:
-      - mongo_notifications_data:/data/db
+      - mongo_audit_data:/data/db
     networks:
       - qa-network
 
@@ -311,19 +311,14 @@ services:
   api-audit:
     build: ./apps/api-audit
     container_name: api-audit
-    ports:
-      - "3006:3006"
     environment:
-      PORT: "3006"
-      GLOBAL_PREFIX: "api/v1"
-      MONGO_URL: "mongodb://mongo-notifications:27017/audit_db"
       KAFKA_BROKERS: "redpanda:9092"
       KAFKA_GROUP_ID: "api-audit"
-      KAFKA_TOPIC_EQUIPMENT: "equipment.events"
+      MONGO_URL: "mongodb://mongo-audit:27017/audit_db"
     depends_on:
-      mongo-notifications:
-        condition: service_started
       redpanda:
+        condition: service_started
+      mongo-audit:
         condition: service_started
     networks:
       - qa-network
@@ -383,4 +378,4 @@ volumes:
   postgres_inventory_data:
   postgres_loans_data:
   postgres_reservations_data:
-  mongo_notifications_data:
+  mongo_audit_data:
