@@ -1,0 +1,56 @@
+name: Terraform PROD
+
+on:
+  push:
+    branches: [ "prod" ]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform fmt
+        working-directory: terraform/prod
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        working-directory: terraform/prod
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: terraform/prod
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          TF_VAR_key_name: ${{ secrets.TF_VAR_key_name }}
+          TF_VAR_my_ip_cidr: ${{ secrets.TF_VAR_my_ip_cidr }}
+          TF_VAR_dockerhub_user: ${{ secrets.TF_VAR_dockerhub_user }}
+          TF_VAR_image_tag: ${{ secrets.TF_VAR_image_tag }}
+        run: terraform plan
+
+      - name: Terraform apply
+        working-directory: terraform/prod
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          TF_VAR_key_name: ${{ secrets.TF_VAR_key_name }}
+          TF_VAR_my_ip_cidr: ${{ secrets.TF_VAR_my_ip_cidr }}
+          TF_VAR_dockerhub_user: ${{ secrets.TF_VAR_dockerhub_user }}
+          TF_VAR_image_tag: ${{ secrets.TF_VAR_image_tag }}
+        run: terraform apply -auto-approve
