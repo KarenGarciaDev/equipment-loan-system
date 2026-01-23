@@ -37,9 +37,9 @@ module "alb" {
 # - enable_nat=false (default): deploy into public subnets so instances can pull docker images without NAT cost.
 # - enable_nat=true: deploy into private subnets (requires NAT gateway).
 locals {
-  app_subnets  = var.enable_nat ? module.network.private_subnet_ids : module.network.public_subnet_ids
-  data_subnet  = var.enable_nat ? module.network.private_subnet_a_id  : module.network.public_subnet_a_id
-  data_public  = var.enable_nat ? false : true
+  app_subnets = var.enable_nat ? module.network.private_subnet_ids : module.network.public_subnet_ids
+  data_subnet = var.enable_nat ? module.network.private_subnet_a_id : module.network.public_subnet_a_id
+  data_public = var.enable_nat ? false : true
 }
 
 # DATA user-data: install docker + start data compose
@@ -67,8 +67,8 @@ locals {
   })
 
   app_user_data = templatefile("${path.module}/../templates/user-data-app.sh.tpl", {
-    nginx_conf   = file("${path.module}/../templates/nginx.conf")
-    app_compose  = local.app_compose
+    nginx_conf  = file("${path.module}/../templates/nginx.conf")
+    app_compose = local.app_compose
   })
 }
 
